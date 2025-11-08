@@ -1,0 +1,4 @@
+packages:
+  - '.'   # This is the root package (your resource)
+  - 'lib' # The types package
+  - 'web' # The UI package
