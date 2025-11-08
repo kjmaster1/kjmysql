@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".",
+    "noEmit": false,
+    "declaration": true,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "emitDeclarationOnly": false
+  },
+  "include": ["MySQL.ts"],
+  "exclude": []
+}

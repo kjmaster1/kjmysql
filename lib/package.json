@@ -1,0 +1,11 @@
+{
+  "name": "@kjmaster2/kjmysql",
+  "version": "2.0.0",
+  "description": "Type definitions for kjmysql",
+  "types": "MySQL.d.ts",
+  "main": "MySQL.js",
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "author": "kjmaster1"
+}

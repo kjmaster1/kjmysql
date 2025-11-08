@@ -1,0 +1,1 @@
+declare module 'tinro/cmp/index.js';

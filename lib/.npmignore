@@ -1,0 +1,5 @@
+# Ignore the source file
+MySQL.ts
+
+# Ignore the build config
+tsconfig.json
