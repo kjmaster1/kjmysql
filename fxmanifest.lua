@@ -6,7 +6,7 @@ node_version '22'
 
 name 'kjmysql'
 author 'kjmysql'
-version '1.0.0'
+version '2.0.0'
 description 'A FiveM MySQL resource using node-mysql2'
 
 server_script 'dist/build.js'
@@ -24,12 +24,14 @@ provide 'mysql-async'
 provide 'ghmattimysql'
 
 convar_category 'kjmysql' {
-	'Configuration',
-	{
-		{ 'Connection string', 'mysql_connection_string', 'CV_STRING', 'mysql://user:password@localhost/database' },
-		{ 'Debug', 'mysql_debug', 'CV_BOOL', 'false' },
-    { 'Slow Query Warning (ms)', 'mysql_slow_query_warning', 'CV_INT', '200' },
-    { 'Result Set Warning (rows)', 'mysql_resultset_warning', 'CV_INT', '1000' },
-    { 'Check for Updates', 'mysql_versioncheck', 'CV_BOOL', 'true' }
-	}
+    'Configuration',
+    {
+        { 'Connection string', 'mysql_connection_string', 'CV_STRING', 'mysql://user:password@localhost/database' },
+        { 'Read-only Connection string', 'mysql_read_connection_string', 'CV_STRING', '' },
+        { 'Debug', 'mysql_debug', 'CV_BOOL', 'false' },
+        { 'Slow Query Warning (ms)', 'mysql_slow_query_warning', 'CV_INT', '200' },
+        { 'Result Set Warning (rows)', 'mysql_resultset_warning', 'CV_INT', '1000' },
+        { 'Check for Updates', 'mysql_versioncheck', 'CV_BOOL', 'true' },
+        { 'Enable UI', 'mysql_ui', 'CV_BOOL', 'false' }
+    }
 }

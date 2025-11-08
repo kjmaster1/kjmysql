@@ -89,6 +89,7 @@ build(buildOptions)
             // Add all the necessary files
             archive.file('fxmanifest.lua', { name: 'fxmanifest.lua' });
             archive.file('ui.lua', { name: 'ui.lua' });
+            archive.file('lib/MySQL.lua', { name: 'lib/MySQL.lua' });
             archive.directory('dist/', 'dist');
             archive.directory('web/build/', 'web/build');
 
