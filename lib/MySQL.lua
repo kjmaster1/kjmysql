@@ -1,64 +1,155 @@
----@meta kjmysql
----@diagnostic disable: undefined-global
+local promise = promise
+local Await = Citizen.Await
+local resourceName = GetCurrentResourceName()
+local GetResourceState = GetResourceState
 
--- This file is for intellisense and is not a functional script
--- Provides autocompletion for Sumneko_Lua and FiveM-Target language servers
+local options = {
+    return_callback_errors = false
+}
 
----@class MigrationExecutor
----@field query fun(sql: string, values?: any): Promise<any>
----@field execute fun(sql: string, values?: any): Promise<any>
+for i = 1, GetNumResourceMetadata(resourceName, 'mysql_option') do
+    local option = GetResourceMetadata(resourceName, 'mysql_option', i - 1)
+    options[option] = true
+end
 
----@alias MigrationUpFunction fun(db: MigrationExecutor): Promise<nil>
+local function await(fn, query, parameters)
+    local p = promise.new()
 
----@class Logger
----@field log fun(...)
----@field warn fun(...)
----@field error fun(...)
+    fn(nil, query, parameters, function(result, error)
+        if error then
+            return p:reject(error)
+        end
 
----@class kjmysql
----@field query fun(query: string, parameters: any, cb: fun(result: any))
----@field single fun(query: string, parameters: any, cb: fun(result: any))
----@field scalar fun(query: string, parameters: any, cb: fun(result: any))
----@field insert fun(query: string, parameters: any, cb: fun(result: number))
----@field update fun(query: string, parameters: any, cb: fun(result: number))
----@field transaction fun(queries: table, parameters: any, cb: fun(result: boolean))
----@field prepare fun(query: string, parameters: any, cb: fun(result: any))
----@field rawExecute fun(query: string, parameters: any, cb: fun(result: any))
----@field startTransaction fun(queries: fun(query: fun(sql: string, values?: any): Promise<any>): Promise<boolean|nil>, cb: fun(result: boolean))
+        p:resolve(result)
+    end, resourceName, true)
 
----@field query_async fun(query: string, parameters?: any): Promise<any[]>
----@field single_async fun(query: string, parameters?: any): Promise<any>
----@field scalar_async fun(query: string, parameters?: any): Promise<any>
----@field insert_async fun(query: string, parameters?: any): Promise<number>
----@field update_async fun(query: string, parameters?: any): Promise<number>
----@field transaction_async fun(queries: table, parameters?: any): Promise<boolean>
----@field prepare_async fun(query: string, parameters?: any): Promise<any>
----@field rawExecute_async fun(query: string, parameters?: any): Promise<any>
----@field startTransaction_async fun(queries: fun(query: fun(sql: string, values?: any): Promise<any>): Promise<boolean|nil>): Promise<boolean>
+    return Await(p)
+end
 
----@field query_cached fun(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any[]>
----@field single_cached fun(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any>
----@field scalar_cached fun(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any>
----@field clearCache fun(cacheKey?: string | string[])
+local type = type
+local queryStore = {}
 
----@field runMigrations fun(resourceName: string, migrationsPath: string): Promise<nil>
----@field table fun(tableName: string): KjQuery
----@field setLogger fun(provider: Logger)
+local function safeArgs(query, parameters, cb, transaction)
+    local queryType = type(query)
 
----@class KjQuery
----@field select fun(self: KjQuery, ...: string): KjQuery
----@field where fun(self: KjQuery, field: string, operator: string, value: any): KjQuery
----@field limit fun(self: KjQuery, count: number): KjQuery
----@field insert fun(self: KjQuery, data: table): KjQuery
----@field update fun(self: KjQuery, data: table): KjQuery
----@field delete fun(self: KjQuery): KjQuery
----@field join fun(self: KjQuery, table: string, field1: string, operator: string, field2: string): KjQuery
----@field leftJoin fun(self: KjQuery, table: string, field1: string, operator: string, field2: string): KjQuery
----@field groupBy fun(self: KjQuery, ...: string): KjQuery
----@field orderBy fun(self: KjQuery, field: string, direction?: 'ASC' | 'DESC'): KjQuery
----@field all fun(self: KjQuery): Promise<any[]>
----@field first fun(self: KjQuery): Promise<any>
----@field run fun(self: KjQuery): Promise<number>
+    if queryType == 'number' then
+        query = queryStore[query]
+        assert(query, "First argument received invalid query store reference")
+    elseif transaction then
+        if queryType ~= 'table' then
+            error(("First argument expected table, received '%s'"):format(query))
+        end
+    elseif queryType ~= 'string' then
+        error(("First argument expected string, received '%s'"):format(query))
+    end
 
----@type kjmysql
-exports.kjmysql = {}
+    if parameters then
+        local paramType = type(parameters)
+
+        if paramType ~= 'table' and paramType ~= 'function' then
+            error(("Second argument expected table or function, received '%s'"):format(parameters))
+        end
+
+        if paramType == 'function' or parameters.__cfx_functionReference then
+            cb = parameters
+            parameters = nil
+        end
+    end
+
+    if cb and parameters then
+        local cbType = type(cb)
+
+        if cbType ~= 'function' and (cbType == 'table' and not cb.__cfx_functionReference) then
+            error(("Third argument expected function, received '%s'"):format(cb))
+        end
+    end
+
+    return query, parameters, cb
+end
+
+local kjmysql = exports.kjmysql
+
+local mysql_method_mt = {
+    __call = function(self, query, parameters, cb)
+        query, parameters, cb = safeArgs(query, parameters, cb, self.method == 'transaction')
+        return kjmysql[self.method](nil, query, parameters, cb, resourceName, options.return_callback_errors)
+    end
+}
+
+local MySQL = setmetatable(MySQL or {}, {
+    __index = function(_, index)
+        return function(...)
+            return kjmysql[index](nil, ...)
+        end
+    end
+})
+
+for _, method in pairs({
+    'scalar', 'single', 'query', 'insert', 'update', 'prepare', 'transaction', 'rawExecute',
+}) do
+    MySQL[method] = setmetatable({
+        method = method,
+        await = function(query, parameters)
+            query, parameters = safeArgs(query, parameters, nil, method == 'transaction')
+            return await(kjmysql[method], query, parameters)
+        end
+    }, mysql_method_mt)
+end
+
+local alias = {
+    fetchAll = 'query',
+    fetchScalar = 'scalar',
+    fetchSingle = 'single',
+    insert = 'insert',
+    execute = 'update',
+    transaction = 'transaction',
+    prepare = 'prepare'
+}
+
+local alias_mt = {
+    __index = function(self, key)
+        if alias[key] then
+            local method = MySQL[alias[key]]
+            MySQL.Async[key] = method
+            MySQL.Sync[key] = method.await
+            alias[key] = nil
+            return self[key]
+        end
+    end
+}
+
+local function addStore(query, cb)
+    assert(type(query) == 'string', 'The SQL Query must be a string')
+
+    local storeN = #queryStore + 1
+    queryStore[storeN] = query
+
+    return cb and cb(storeN) or storeN
+end
+
+MySQL.Sync = setmetatable({ store = addStore }, alias_mt)
+MySQL.Async = setmetatable({ store = addStore }, alias_mt)
+
+local function onReady(cb)
+    while GetResourceState('oxmysql') ~= 'started' do
+        Wait(50)
+    end
+
+    kjmysql.awaitConnection()
+
+    return cb and cb() or true
+end
+
+MySQL.ready = setmetatable({
+    await = onReady
+}, {
+    __call = function(_, cb)
+        Citizen.CreateThreadNow(function() onReady(cb) end)
+    end,
+})
+
+function MySQL.startTransaction(cb)
+    return kjmysql:startTransaction(cb, resourceName)
+end
+
+_ENV.MySQL = MySQL

@@ -1,17 +1,29 @@
 import './update';
 import './database';
-import {rawExecute, rawQuery, rawTransaction, startTransaction} from './database';
+import {pool, rawExecute, rawQuery, rawTransaction, startTransaction} from './database';
 import type {CFXCallback, CFXParameters, Transaction} from './types';
 import ghmatti from './compatibility/ghmattimysql';
 import mysqlAsync from './compatibility/mysql-async';
 import {KjQuery, setBuilderExecutors} from './database/builder';
 import {cache} from './database/cache';
-import { loggingProvider, setLogger } from './logger';
+import {Logger, loggingProvider, setLogger} from './logger';
 import {runMigrations} from "./database/migrations";
+import {sleep} from "./utils/sleep";
 
 loggingProvider.log('^2kjmysql has started!^0');
 
 const MySQL = {} as Record<string, Function>;
+
+
+MySQL.isReady = () => {
+    return !!pool;
+}
+
+MySQL.awaitConnection = async () => {
+    while (!pool) await sleep(0);
+
+    return true;
+};
 
 // --- Callback-based Exports ---
 // These are the raw functions that other resources will call
@@ -102,6 +114,8 @@ MySQL.store = (query: string, cb: Function) => {
     return query;
 };
 
+
+
 // --- Promise-based Async Exports ---
 // We create these as a separate object so they can be shared.
 
@@ -190,7 +204,9 @@ setBuilderExecutors({
 
 // --- Create All Global Exports ---
 
-global.exports('setLogger', setLogger);
+global.exports('setLogger', (provider: Partial<Logger>) => {
+    return setLogger(provider);
+});
 
 function provide(resourceName: string, method: string, cb: Function) {
     on(`__cfx_export_${resourceName}_${method}`, (setCb: Function) => setCb(cb));
@@ -271,4 +287,6 @@ global.exports('clearCache', (cacheKey?: string | string[]) => {
 /**
  * Exports a function to run database migrations for a resource.
  */
-global.exports('runMigrations', runMigrations);
+global.exports('runMigrations', (resourceName: string, migrationsPath: string) => {
+    return runMigrations(resourceName, migrationsPath);
+});

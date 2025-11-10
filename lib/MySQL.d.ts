@@ -1,52 +1,13 @@
-export type Transaction = string[] | [string, any[]][] | {
+type CFXParameters = any[];
+type CFXCallback = (result: unknown, err?: string) => void;
+type Transaction = string[] | [string, CFXParameters][] | {
     query: string;
-    values: any[];
+    values: CFXParameters;
 }[] | {
     query: string;
-    parameters: any[];
+    parameters: CFXParameters;
 }[];
-/**
- * Provides a simple, transaction-safe database executor
- * passed to TypeScript-based migration files.
- */
-export interface MigrationExecutor {
-    query(sql: string, values?: any[]): Promise<any>;
-    execute(sql: string, values?: any[]): Promise<any>;
-}
-export interface Logger {
-    log: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    error: (...args: any[]) => void;
-}
-export type MigrationUpFunction = (db: MigrationExecutor) => Promise<void>;
-export declare function query(query: string, parameters: any, cb: (result: any) => void): void;
-export declare function single(query: string, parameters: any, cb: (result: any) => void): void;
-export declare function scalar(query: string, parameters: any, cb: (result: any) => void): void;
-export declare function insert(query: string, parameters: any, cb: (result: number) => void): void;
-export declare function update(query: string, parameters: any, cb: (result: number) => void): void;
-export declare function transaction(queries: Transaction, parameters: any, cb: (result: boolean) => void): void;
-export declare function prepare(query: string, parameters: any, cb: (result: any) => void): void;
-export declare function rawExecute(query: string, parameters: any, cb: (result: any) => void): void;
-export declare function startTransaction(queries: (query: (sql: string, values?: any) => Promise<any>) => Promise<boolean | void>, cb: (result: boolean) => void): void;
-/**
- * Overrides the default logger (console) with a custom provider.
- * @param provider An object with log, warn, and error methods.
- */
-export declare function setLogger(provider: Partial<Logger>): void;
-export declare function query_async(query: string, parameters?: any): Promise<any[]>;
-export declare function single_async(query: string, parameters?: any): Promise<any>;
-export declare function scalar_async(query: string, parameters?: any): Promise<any>;
-export declare function insert_async(query: string, parameters?: any): Promise<number>;
-export declare function update_async(query: string, parameters?: any): Promise<number>;
-export declare function transaction_async(queries: Transaction, parameters?: any): Promise<boolean>;
-export declare function prepare_async(query: string, parameters?: any): Promise<any>;
-export declare function rawExecute_async(query: string, parameters?: any): Promise<any>;
-export declare function startTransaction_async(queries: (query: (sql: string, values?: any) => Promise<any>) => Promise<boolean | void>): Promise<boolean>;
-export declare function query_cached(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any[]>;
-export declare function single_cached(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any>;
-export declare function scalar_cached(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any>;
-export declare function clearCache(cacheKey?: string | string[]): void;
-export declare class KjQuery {
+declare class KjQuery {
     private _table;
     constructor(tableName: string);
     /**
@@ -121,15 +82,32 @@ export declare class KjQuery {
      */
     run(): Promise<number>;
 }
-/**
- * Creates a new query builder instance for a specific table.
- * @param tableName The name of the table to query.
- */
-export declare function table(tableName: string): KjQuery;
-/**
- * Runs database migrations from a specified folder for a given resource.
- * Supports .sql files and .ts files that export an 'up' function.
- * @param resourceName The name of the resource running migrations (e.g., GetCurrentResourceName()).
- * @param migrationsPath The absolute path to the migrations folder (e.g., GetResourcePath(GetCurrentResourceName()) + '/migrations').
- */
-export declare function runMigrations(resourceName: string, migrationsPath: string): Promise<void>;
+interface Logger {
+    log: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+}
+interface KjMySQL {
+    store: (query: string, cb: Function) => void;
+    ready: (callback: () => void) => void;
+    isReady: () => boolean;
+    awaitConnection: () => Promise<true>;
+    query: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    single: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    scalar: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    insert: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    update: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    transaction: (queries: Transaction, parameters: CFXParameters, cb: CFXCallback) => Promise<true | void>;
+    startTransaction: (transactions: () => Promise<boolean>, cb: CFXCallback) => Promise<boolean | void>;
+    prepare: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    rawExecute: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    table: (tableName: string) => KjQuery;
+    query_cached: (cacheKey: string, ttl: number, query: string, parameters: CFXParameters) => Promise<any>;
+    single_cached: (cacheKey: string, ttl: number, query: string, parameters: CFXParameters) => Promise<any>;
+    scalar_cached: (cacheKey: string, ttl: number, query: string, parameters: CFXParameters) => Promise<any>;
+    clearCache: (cacheKey?: string | string[]) => void;
+    runMigrations: (resourceName: string, migrationsPath: string) => Promise<void>;
+    setLogger: (logger: Logger) => void;
+}
+export declare const kjmysql: KjMySQL;
+export {};

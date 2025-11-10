@@ -1,68 +1,14 @@
-export type Transaction =
+type Query = string;
+type CFXParameters = any[];
+type CFXCallback = (result: unknown, err?: string) => void;
+
+type Transaction =
     | string[]
-    | [string, any[]][]
-    | { query: string; values: any[] }[]
-    | { query: string; parameters: any[] }[];
+    | [string, CFXParameters][]
+    | { query: string; values: CFXParameters }[]
+    | { query: string; parameters: CFXParameters }[];
 
-/**
- * Provides a simple, transaction-safe database executor
- * passed to TypeScript-based migration files.
- */
-export interface MigrationExecutor {
-    query(sql: string, values?: any[]): Promise<any>;
-    execute(sql: string, values?: any[]): Promise<any>;
-}
-
-export interface Logger {
-    log: (...args: any[]) => void;
-    warn: (...args: any[]) => void;
-    error: (...args: any[]) => void;
-}
-
-export type MigrationUpFunction = (db: MigrationExecutor) => Promise<void>;
-
-// --- Callback Exports ---
-export function query(query: string, parameters: any, cb: (result: any) => void) {}
-export function single(query: string, parameters: any, cb: (result: any) => void) {}
-export function scalar(query: string, parameters: any, cb: (result: any) => void) {}
-export function insert(query: string, parameters: any, cb: (result: number) => void) {}
-export function update(query: string, parameters: any, cb: (result: number) => void) {}
-export function transaction(queries: Transaction, parameters: any, cb: (result: boolean) => void) {}
-export function prepare(query: string, parameters: any, cb: (result: any) => void) {}
-export function rawExecute(query: string, parameters: any, cb: (result: any) => void) {}
-export function startTransaction(
-    queries: (query: (sql: string, values?: any) => Promise<any>) => Promise<boolean | void>,
-    cb: (result: boolean) => void
-) {}
-
-/**
- * Overrides the default logger (console) with a custom provider.
- * @param provider An object with log, warn, and error methods.
- */
-export function setLogger(provider: Partial<Logger>): void {}
-
-// --- Async/Promise Exports ---
-export function query_async(query: string, parameters?: any): Promise<any[]> { return Promise.resolve([]); }
-export function single_async(query: string, parameters?: any): Promise<any> { return Promise.resolve(null); }
-export function scalar_async(query: string, parameters?: any): Promise<any> { return Promise.resolve(null); }
-export function insert_async(query: string, parameters?: any): Promise<number> { return Promise.resolve(0); }
-export function update_async(query: string, parameters?: any): Promise<number> { return Promise.resolve(0); }
-export function transaction_async(queries: Transaction, parameters?: any): Promise<boolean> { return Promise.resolve(false); }
-export function prepare_async(query: string, parameters?: any): Promise<any> { return Promise.resolve(null); }
-export function rawExecute_async(query: string, parameters?: any): Promise<any> { return Promise.resolve(null); }
-export function startTransaction_async(
-    queries: (query: (sql: string, values?: any) => Promise<any>) => Promise<boolean | void>
-): Promise<boolean> { return Promise.resolve(false); }
-
-// --- Cached Functions ---
-export function query_cached(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any[]> { return Promise.resolve([]); }
-export function single_cached(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any> { return Promise.resolve(null); }
-export function scalar_cached(cacheKey: string, ttl: number, query: string, parameters?: any): Promise<any> { return Promise.resolve(null); }
-export function clearCache(cacheKey?: string | string[]): void {}
-
-// --- Query Builder ---
-
-export class KjQuery {
+class KjQuery {
     private _table: string;
     constructor(tableName: string) { this._table = tableName; }
 
@@ -151,16 +97,169 @@ export class KjQuery {
     run(): Promise<number> { return Promise.resolve(0); }
 }
 
-/**
- * Creates a new query builder instance for a specific table.
- * @param tableName The name of the table to query.
- */
-export function table(tableName: string): KjQuery { return new KjQuery(tableName); }
+interface Logger {
+    log: (...args: any[]) => void;
+    warn: (...args: any[]) => void;
+    error: (...args: any[]) => void;
+}
 
-/**
- * Runs database migrations from a specified folder for a given resource.
- * Supports .sql files and .ts files that export an 'up' function.
- * @param resourceName The name of the resource running migrations (e.g., GetCurrentResourceName()).
- * @param migrationsPath The absolute path to the migrations folder (e.g., GetResourcePath(GetCurrentResourceName()) + '/migrations').
- */
-export function runMigrations(resourceName: string, migrationsPath: string): Promise<void> { return Promise.resolve(); }
+interface KjMySQL {
+    store: (query: string, cb: Function) => void;
+    ready: (callback: () => void) => void;
+    isReady: () => boolean;
+    awaitConnection: () => Promise<true>;
+    query: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    single: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    scalar: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    insert: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    update: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    transaction: (queries: Transaction, parameters: CFXParameters, cb: CFXCallback) => Promise<true | void>;
+    startTransaction: (transactions: () => Promise<boolean>, cb: CFXCallback) => Promise<boolean | void>;
+    prepare: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    rawExecute: (query: string, parameters: CFXParameters, cb: CFXCallback) => Promise<any>;
+    table: (tableName: string) => KjQuery;
+    query_cached: (cacheKey: string, ttl: number, query: string, parameters: CFXParameters) => Promise<any>;
+    single_cached: (cacheKey: string, ttl: number, query: string, parameters: CFXParameters) => Promise<any>;
+    scalar_cached: (cacheKey: string, ttl: number, query: string, parameters: CFXParameters) => Promise<any>;
+    clearCache: (cacheKey?: string | string[]) => void;
+    runMigrations: (resourceName: string, migrationsPath: string) => Promise<void>;
+    setLogger: (logger: Logger) => void;
+}
+
+const QueryStore: string[] = [];
+
+function assert(condition: boolean, message: string) {
+    if (!condition) throw new TypeError(message);
+}
+
+const safeArgs = (query: Query | Transaction, params?: any, cb?: Function, transaction?: true) => {
+    if (typeof query === 'number') {
+        query = QueryStore[query];
+        assert(typeof query === 'string', 'First argument received invalid query store reference');
+    }
+
+    if (transaction) {
+        assert(typeof query === 'object', `First argument expected object, recieved ${typeof query}`);
+    } else {
+        assert(typeof query === 'string', `First argument expected string, received ${typeof query}`);
+    }
+
+    if (params) {
+        const paramType = typeof params;
+        assert(
+            paramType === 'object' || paramType === 'function',
+            `Second argument expected object or function, received ${paramType}`
+        );
+
+        if (!cb && paramType === 'function') {
+            cb = params;
+            params = undefined;
+        }
+    }
+
+    if (cb !== undefined) assert(typeof cb === 'function', `Third argument expected function, received ${typeof cb}`);
+
+    return [query, params, cb];
+};
+
+declare var global: any;
+const exp = global.exports.kjmysql;
+const currentResourceName = GetCurrentResourceName();
+
+function execute(method: string, query: Query | Transaction, params?: CFXParameters) {
+    return new Promise((resolve, reject) => {
+        exp[method](
+            query,
+            params,
+            (result: unknown, error: any) => {
+                if (error) return reject(error);
+                resolve(result);
+            },
+            currentResourceName
+        );
+    }) as any;
+}
+
+export const kjmysql: KjMySQL = {
+    store(query) {
+        assert(typeof query !== 'string', `Query expects a string, received ${typeof query}`);
+
+        return QueryStore.push(query);
+    },
+    ready(callback) {
+        setImmediate(async () => {
+            while (GetResourceState('kjmysql') !== 'started') await new Promise((resolve) => setTimeout(resolve, 50, null));
+            callback();
+        });
+    },
+    async query(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('query', query, params);
+        return cb ? cb(result) : result;
+    },
+    async single(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('single', query, params);
+        return cb ? cb(result) : result;
+    },
+    async scalar(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('scalar', query, params);
+        return cb ? cb(result) : result;
+    },
+    async update(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('update', query, params);
+        return cb ? cb(result) : result;
+    },
+    async insert(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('insert', query, params);
+        return cb ? cb(result) : result;
+    },
+    async prepare(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('prepare', query, params);
+        return cb ? cb(result) : result;
+    },
+    async rawExecute(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb);
+        const result = await execute('rawExecute', query, params);
+        return cb ? cb(result) : result;
+    },
+    async transaction(query, params, cb) {
+        [query, params, cb] = safeArgs(query, params, cb, true);
+        const result = await execute('transaction', query, params);
+        return cb ? cb(result) : result;
+    },
+    isReady() {
+        return exp.isReady();
+    },
+    async awaitConnection() {
+        return await exp.awaitConnection();
+    },
+    async startTransaction(transactions: () => Promise<boolean>, cb) {
+        return exp.startTransaction(transactions, cb, currentResourceName);
+    },
+    table(tableName) {
+        return exp.table(tableName);
+    },
+    async query_cached(cacheKey: string, ttl: number, query: string, parameters: CFXParameters) {
+        return exp.query_cached(cacheKey, ttl, query, parameters);
+    },
+    async single_cached(cacheKey: string, ttl: number, query: string, parameters: CFXParameters) {
+        return exp.single_cached(cacheKey, ttl, query, parameters);
+    },
+    async scalar_cached(cacheKey: string, ttl: number, query: string, parameters: CFXParameters) {
+        return exp.scalar_cached(cacheKey, ttl, query, parameters);
+    },
+    clearCache(cacheKey?: string | string[]) {
+        return exp.clearCache(cacheKey);
+    },
+    async runMigrations(resourceName: string, migrationsPath: string) {
+        return exp.runMigrations(resourceName, migrationsPath);
+    },
+    setLogger(provider: Partial<Logger>) {
+        return exp.setLogger(provider);
+    }
+};
