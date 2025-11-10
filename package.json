@@ -9,7 +9,7 @@
     "build": "node build.js",
     "watch": "node build.js --watch",
     "postinstall": "patch-package",
-    "build:all": "pnpm recursive run build",
+    "build:all": "pnpm recursive run build && node build.js",
     "release": "pnpm run build:all && node build.js --release"
   },
   "dependencies": {

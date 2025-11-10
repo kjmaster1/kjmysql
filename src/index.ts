@@ -282,6 +282,8 @@ global.exports('execute_builder', async (state: any) => {
             break;
     }
 
+    console.log("Adding wheres: ", state.wheres)
+
     // Add WHERES (applies to select, update, delete)
     state.wheres.forEach((w: any) => {
         builder.where(w.field, w.operator, w.value);

@@ -97,6 +97,10 @@ export const logQuery = (
         slow: executionTime >= mysql_slow_query_warning ? true : undefined,
     };
 
+    if (!logStorage[invokingResource]) {
+        logStorage[invokingResource] = [];
+    }
+
     logStorage[invokingResource].push(newQueryData);
 
     if (uiActivePlayers.size > 0) {
@@ -114,6 +118,7 @@ export const logQuery = (
 RegisterCommand(
     'mysql',
     (source: number) => {
+        console.log(mysql_ui)
         if (!mysql_ui) return;
         if (source < 1) return loggingProvider.log('^3This command cannot run server side^0');
 

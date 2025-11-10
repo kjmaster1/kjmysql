@@ -68,6 +68,7 @@ export class KjQuery {
 
     public where(field: string, operator: string, value: any): this {
         this._wheres.push({ field, operator, value });
+        console.log('current state of wheres: ', this._wheres);
         return this;
     }
 
@@ -140,6 +141,7 @@ export class KjQuery {
             const paramName = this._addParam(clause.value);
             return `${this._quoteField(clause.field)} ${clause.operator} ${paramName}`;
         });
+        console.log('clauses: ', clauses);
         return ` WHERE ${clauses.join(' AND ')}`;
     }
 
@@ -203,6 +205,8 @@ export class KjQuery {
 
                 // Assemble the final query
                 const sql = `SELECT ${fields} FROM \`${this._table}\` ${joinClause}${whereClause}${groupClause}${orderClause}${limitClause}`;
+                console.log('sql', sql);
+                console.log('params', this._params);
                 return [sql, this._params];
             }
         }
@@ -213,6 +217,8 @@ export class KjQuery {
     public async all(): Promise<any[]> {
         if (this._type !== 'select') throw new Error('Cannot call .all() on a non-SELECT query');
         const [sql, params] = this._buildQuery();
+        console.log('sql', sql);
+        console.log('params', params);
         return executors.query(sql, params);
     }
 
