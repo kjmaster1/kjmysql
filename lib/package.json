@@ -1,6 +1,6 @@
 {
   "name": "@kjmaster2/kjmysql",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Type definitions for kjmysql",
   "types": "MySQL.d.ts",
   "main": "MySQL.js",

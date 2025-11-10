@@ -1,4 +1,5 @@
 import NodeCache from 'node-cache';
+import {loggingProvider} from "../logger";
 
 /**
  * Global cache instance.
@@ -7,4 +8,4 @@ import NodeCache from 'node-cache';
  */
 export const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
 
-console.log('^2[kjmysql] Cache module initialized.^0');
+loggingProvider.log('^2[kjmysql] Cache module initialized.^0');
