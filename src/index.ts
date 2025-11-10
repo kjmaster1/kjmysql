@@ -241,12 +241,73 @@ for (const key in exportedAsyncFunctions) {
     }
 }
 
-// Export the query builder
-global.exports('table', (tableName: string) => {
-    if (typeof tableName !== 'string' || tableName.length === 0) {
-        throw new Error('Invalid table name provided to table()');
+global.exports('execute_builder', async (state: any) => {
+    if (!state || typeof state.table !== 'string') {
+        throw new Error('[kjmysql] Invalid query state object received');
     }
-    return new KjQuery(tableName);
+
+    // Create a REAL KjQuery instance inside the kjmysql resource
+    let builder = new KjQuery(state.table);
+
+    // Replay the query from the state object onto the real builder
+    switch (state.type) {
+        case 'insert':
+            builder.insert(state.insertData);
+            break;
+        case 'update':
+            builder.update(state.updateData);
+            break;
+        case 'delete':
+            builder.delete();
+            break;
+        case 'select':
+        default:
+            builder.select(...state.fields);
+
+            state.joins.forEach((j: any) => {
+                if (j.type === 'LEFT') {
+                    builder.leftJoin(j.table, j.field1, j.operator, j.field2);
+                } else {
+                    builder.join(j.table, j.field1, j.operator, j.field2);
+                }
+            });
+
+            if (state.groups.length > 0) {
+                builder.groupBy(...state.groups);
+            }
+
+            state.orders.forEach((o: any) => {
+                builder.orderBy(o.field, o.direction);
+            });
+            break;
+    }
+
+    // Add WHERES (applies to select, update, delete)
+    state.wheres.forEach((w: any) => {
+        builder.where(w.field, w.operator, w.value);
+    });
+
+    // Add LIMIT
+    if (state.limit !== null) {
+        builder.limit(state.limit);
+    }
+
+    // --- Execute the now-rebuilt query ---
+    try {
+        if (state.type === 'select') {
+            // .first() set the limit to 1, so we can check that
+            if (state.limit === 1) {
+                return await builder.first();
+            } else {
+                return await builder.all();
+            }
+        } else {
+            return await builder.run();
+        }
+    } catch (e: any) {
+        loggingProvider.error(`[^1kjmysql^0] Error executing builder query: ${e.message}`);
+        throw e; // Re-throw the error so the calling resource is aware
+    }
 });
 
 // --- Export Caching Functions ---

@@ -9,92 +9,108 @@ type Transaction =
     | { query: string; parameters: CFXParameters }[];
 
 class KjQuery {
-    private _table: string;
-    constructor(tableName: string) { this._table = tableName; }
+    private _state: {
+        table: string;
+        fields: string[] | string;
+        wheres: { field: string; operator: string; value: any }[];
+        limit: number | null;
+        type: 'select' | 'insert' | 'update' | 'delete';
+        insertData: Record<string, any> | null;
+        updateData: Record<string, any> | null;
+        joins: { type: 'INNER' | 'LEFT'; table: string; field1: string; operator: string; field2: string }[];
+        groups: string[];
+        orders: { field: string; direction: 'ASC' | 'DESC' }[];
+    };
 
-    /**
-     * Selects fields from the table.
-     * @param fields Fields to select. Defaults to '*'.
-     */
-    select(...fields: string[]): this { return this; }
+    constructor(tableName: string) {
+        this._state = {
+            table: tableName,
+            fields: ['*'],
+            wheres: [],
+            limit: null,
+            type: 'select',
+            insertData: null,
+            updateData: null,
+            joins: [],
+            groups: [],
+            orders: [],
+        };
+    }
 
-    /**
-     * Adds a WHERE clause to the query.
-     * @param field The column name.
-     * @param operator The operator (e.g., '=', '>', 'IN').
-     * @param value The value to test against.
-     */
-    where(field: string, operator: string, value: any): this { return this; }
+    select(...fields: string[]): this {
+        if (fields.length > 0) {
+            this._state.fields = fields;
+        }
+        this._state.type = 'select';
+        return this;
+    }
 
-    /**
-     * Adds a LIMIT clause to the query.
-     * @param count The number of rows to return.
-     */
-    limit(count: number): this { return this; }
+    where(field: string, operator: string, value: any): this {
+        this._state.wheres.push({ field, operator, value });
+        return this;
+    }
 
-    /**
-     * Sets the query type to INSERT.
-     * @param data An object of key/value pairs to insert.
-     */
-    insert(data: Record<string, any>): this { return this; }
+    limit(count: number): this {
+        this._state.limit = count;
+        return this;
+    }
 
-    /**
-     * Sets the query type to UPDATE.
-     * @param data An object of key/value pairs to update.
-     */
-    update(data: Record<string, any>): this { return this; }
+    insert(data: Record<string, any>): this {
+        this._state.type = 'insert';
+        this._state.insertData = data;
+        return this;
+    }
 
-    /**
-     * Sets the query type to DELETE.
-     */
-    delete(): this { return this; }
+    update(data: Record<string, any>): this {
+        this._state.type = 'update';
+        this._state.updateData = data;
+        return this;
+    }
 
-    /**
-     * Performs an INNER JOIN on another table.
-     * @param table The table to join.
-     * @param field1 The first field to join on (e.g., 'users.id').
-     * @param operator The join operator (e.g., '=').
-     * @param field2 The second field to join on (e.g., 'inventory.owner').
-     */
-    join(table: string, field1: string, operator: string, field2: string): this { return this; }
+    delete(): this {
+        this._state.type = 'delete';
+        return this;
+    }
 
-    /**
-     * Performs a LEFT JOIN on another table.
-     * @param table The table to join.
-     * @param field1 The first field to join on.
-     * @param operator The join operator.
-     * @param field2 The second field to join on.
-     */
-    leftJoin(table: string, field1: string, operator: string, field2: string): this { return this; }
+    private _addJoin(type: 'INNER' | 'LEFT', table: string, field1: string, operator: string, field2: string): this {
+        this._state.joins.push({ type, table, field1, operator, field2 });
+        return this;
+    }
 
-    /**
-     * Adds a GROUP BY clause to the query.
-     * @param fields Fields to group by.
-     */
-    groupBy(...fields: string[]): this { return this; }
+    join(table: string, field1: string, operator: string, field2: string): this {
+        return this._addJoin('INNER', table, field1, operator, field2);
+    }
 
-    /**
-     * Adds an ORDER BY clause to the query.
-     * @param field The field to order by.
-     * @param direction The direction to sort (ASC or DESC).
-     */
-    orderBy(field: string, direction: 'ASC' | 'DESC' = 'ASC'): this { return this; }
+    leftJoin(table: string, field1: string, operator: string, field2: string): this {
+        return this._addJoin('LEFT', table, field1, operator, field2);
+    }
 
-    /**
-     * Executes a SELECT query and returns all matching rows.
-     */
-    all(): Promise<any[]> { return Promise.resolve([]); }
+    groupBy(...fields: string[]): this {
+        this._state.groups.push(...fields);
+        return this;
+    }
 
-    /**
-     * Executes a SELECT query and returns the first matching row.
-     */
-    first(): Promise<any> { return Promise.resolve(null); }
+    orderBy(field: string, direction: 'ASC' | 'DESC' = 'ASC'): this {
+        this._state.orders.push({ field, direction });
+        return this;
+    }
 
-    /**
-     * Executes an INSERT, UPDATE, or DELETE query.
-     * @returns For INSERT, returns the insertId. For UPDATE/DELETE, returns affectedRows.
-     */
-    run(): Promise<number> { return Promise.resolve(0); }
+    all(): Promise<any[]> {
+        if (this._state.type !== 'select') throw new Error('Cannot call .all() on a non-SELECT query');
+        // 'exp' is global.exports.kjmysql
+        return exp.execute_builder(this._state);
+    }
+
+    first(): Promise<any> {
+        this._state.limit = 1; // .first() implies limit 1
+        if (this._state.type !== 'select') throw new Error('Cannot call .first() on a non-SELECT query');
+        return exp.execute_builder(this._state);
+    }
+
+    run(): Promise<number> {
+        if (this._state.type === 'select') throw new Error('Cannot call .run() on a SELECT query. Use .all() or .first()');
+        return exp.execute_builder(this._state);
+    }
 }
 
 interface Logger {
@@ -242,7 +258,7 @@ export const kjmysql: KjMySQL = {
         return exp.startTransaction(transactions, cb, currentResourceName);
     },
     table(tableName) {
-        return exp.table(tableName);
+        return new KjQuery(tableName);
     },
     async query_cached(cacheKey: string, ttl: number, query: string, parameters: CFXParameters) {
         return exp.query_cached(cacheKey, ttl, query, parameters);

@@ -6,7 +6,7 @@ node_version '22'
 
 name 'kjmysql'
 author 'kjmysql'
-version '2.0.0'
+version '3.0.1'
 description 'A FiveM MySQL resource using node-mysql2'
 
 server_script 'dist/build.js'
